@@ -2,11 +2,13 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import accuracy_score
+from matplotlib import pyplot as plt
 from dtw_helper import *
 import datasets
 
-PROCESSED_DATASET_PATH = "/cs/home/stu/greer2jl/research/lorenzo_stuff/Music24/processed_dataset/teleband_dataset_mp3"
-SAMPLE_PATH = "/cs/home/stu/greer2jl/research/lorenzo_stuff/Music24/tele.band-playing-samples"
+PROCESSED_DATASET_PATH = "D:/Documents/VsCode/Python/Research-Project/music_23_24/processed_dataset/teleband_dataset_mp3"
+SAMPLE_PATH = "D:/Documents/VsCode/Python/Research-Project/tele.band-playing-samples"
+CHUNK_SIZES = [2, 4, 5, 10, 20, 25, 50, 100, 125, 250]
 
 USE_NORMALIZATION = True
 TRIM_SILENCE = True
@@ -29,7 +31,7 @@ def main():
     playing_sample_map = intialize_playing_sample_map(SAMPLE_PATH, True, True)
 
     dataset = datasets.load_from_disk(PROCESSED_DATASET_PATH)
-    X, y = [], []
+    data = [([], []) for _ in range(len(CHUNK_SIZES))]
 
     for student_recording in dataset:
         s_data, s_sr = student_recording["key"]["array"], student_recording["key"]["sampling_rate"]
@@ -39,32 +41,41 @@ def main():
 
         # Take the first 500 items, since the minimum warping path is 501 in the dataset.
         wp = map_warping_path(wp)[:500]
-        # Split into 5
-        sub_arrays = np.split(wp, 10)
 
-        # Get mean and standard deviation of each subarray
-        mean_std = []
-        for sub_array in sub_arrays:
-            mean_std.extend([np.mean(sub_array), np.std(sub_array)])
-
-        X.append(mean_std)
-        y.append(student_recording["rhythm"])
+        for i in range(len(CHUNK_SIZES)):
+            sub_arrays = np.split(wp, CHUNK_SIZES[i])
+            # Get mean and standard deviation of each subarray
+            mean_std = []
+            for sub_array in sub_arrays:
+                mean_std.extend([np.mean(sub_array), np.std(sub_array)])
+            data[i][0].append(mean_std)
+            data[i][1].append(student_recording["rhythm"])
     
-    rf = RandomForestClassifier()
 
     if USE_CROSS_VALIDATION:
-        scores = cross_val_score(rf, X, y, cv=5)
-        print("%0.2f accuracy with a standard deviation of %0.2f" % (scores.mean(), scores.std()))
+        x, y = [], []
+        for i in range(len(CHUNK_SIZES)):
+            rf = RandomForestClassifier()
+            scores = cross_val_score(rf, data[i][0], data[i][1], cv=5)
+            x.append(CHUNK_SIZES[i])
+            y.append(scores.mean())
+            # print("%0.2f accuracy with a standard deviation of %0.2f with chunk size %d" % (scores.mean(), scores.std(), CHUNK_SIZES[i]))
+        plt.plot(x, y)
+
+        plt.xlabel("Chunk Size")
+        plt.ylabel("Accuracy")
+        plt.show()
+        
     else:
         # We don't really have enough data to do this split, but we are going to anyways because numbers.
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15)
-        # Train model
-        rf.fit(X_train, y_train)
+        # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15)
+        # # Train model
+        # rf.fit(X_train, y_train)
 
-        # Now get data from test set.
-        y_pred = rf.predict(X_test)
-        accuracy = accuracy_score(y_test, y_pred)
-        print(f"Accuracy: {accuracy}")
+        # # Now get data from test set.
+        # y_pred = rf.predict(X_test)
+        # accuracy = accuracy_score(y_test, y_pred)
+        # print(f"Accuracy: {accuracy}")
+        print("not available")
     
 main()
-
